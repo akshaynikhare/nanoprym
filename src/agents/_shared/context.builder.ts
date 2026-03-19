@@ -156,7 +156,7 @@ export class ContextBuilder {
 
     const parts: string[] = [];
     for (const msg of allMessages) {
-      parts.push(`--- [${msg.topic}] from ${msg.sender} ---`);
+      parts.push(`== [${msg.topic}] from ${msg.sender} ==`);
       parts.push(msg.content.text);
       if (msg.content.data) {
         parts.push(JSON.stringify(msg.content.data, null, 2));

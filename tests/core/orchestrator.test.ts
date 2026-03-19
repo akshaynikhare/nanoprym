@@ -7,6 +7,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { EventLedger } from '../../src/core/event-ledger.js';
 import { EventBus } from '../../src/core/event-bus.js';
 import { StateSnapshotter } from '../../src/core/state-snapshot.js';
+import { Orchestrator } from '../../src/core/orchestrator.js';
 import { routeTask } from '../../src/core/config-router.js';
 import type { Message } from '../../src/_shared/types.js';
 import os from 'node:os';
@@ -152,6 +153,34 @@ describe('Orchestrator', () => {
       expect(validations).toHaveLength(2);
       expect(validations[0].content.data?.approved).toBe(false);
       expect(validations[1].content.data?.approved).toBe(true);
+    });
+  });
+
+  describe('Health Check', () => {
+    it('should expose health status via getHealthStatus()', () => {
+      const configDir = path.join(testDir, `health-${Date.now()}`);
+      const orchestrator = new Orchestrator({ configDir, healthPort: 0 });
+
+      const health = orchestrator.getHealthStatus();
+      expect(health).not.toBeNull();
+      expect(health!.status).toBe('ok');
+      expect(health!.version).toBeDefined();
+      expect(typeof health!.uptime).toBe('number');
+      expect(health!.uptime).toBeGreaterThanOrEqual(0);
+      expect(health!.timestamp).toBeDefined();
+      expect(health!.activeTask).toBe(false);
+
+      orchestrator.shutdown();
+    });
+
+    it('should return null after shutdown', () => {
+      const configDir = path.join(testDir, `health-shutdown-${Date.now()}`);
+      const orchestrator = new Orchestrator({ configDir, healthPort: 0 });
+
+      orchestrator.shutdown();
+
+      const health = orchestrator.getHealthStatus();
+      expect(health).toBeNull();
     });
   });
 

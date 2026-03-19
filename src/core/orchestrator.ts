@@ -14,6 +14,7 @@ import { BuilderAgent } from '../agents/builder/builder.agent.js';
 import { ReviewerAgent } from '../agents/reviewer/reviewer.agent.js';
 import { ClaudeProvider } from '../providers/claude.provider.js';
 import { GitManager } from '../git/git.manager.js';
+import { HealthServer, type HealthStatus } from '../http/health.server.js';
 // import { RetryManager } from '../recovery/retry.manager.js';
 import type { TaskComplexity, TaskType, Message } from '../_shared/types.js';
 import { createChildLogger } from '../_shared/logger.js';
@@ -37,17 +38,23 @@ export class Orchestrator {
   private activeLedger: EventLedger | null = null;
   private activeBus: EventBus | null = null;
   private activeAgents: Array<{ stop: () => void }> = [];
+  private healthServer: HealthServer | null = null;
   private ledgerBaseDir: string;
   private claude: ClaudeProvider;
   private gitManager: GitManager;
 
-  constructor(options?: { configDir?: string; repoRoot?: string }) {
+  constructor(options?: { configDir?: string; repoRoot?: string; healthPort?: number }) {
     this.ledgerBaseDir = path.resolve(process.env.HOME ?? '~', options?.configDir ?? LEDGER_DIR);
     if (!fs.existsSync(this.ledgerBaseDir)) {
       fs.mkdirSync(this.ledgerBaseDir, { recursive: true });
     }
     this.claude = new ClaudeProvider();
     this.gitManager = new GitManager(options?.repoRoot);
+
+    this.healthServer = new HealthServer({
+      port: options?.healthPort,
+      activeTaskCheck: () => this.activeBus !== null,
+    });
   }
 
   /** Start a new task — creates ledger, agents, and kicks off pipeline */
@@ -132,7 +139,18 @@ export class Orchestrator {
     }
   }
 
-  /** Shutdown all agents and close ledger */
+  /** Get the active event bus (for external listeners) */
+  getEventBus(): EventBus | null {
+    return this.activeBus;
+  }
+
+  /** Get the current health status from the health server */
+  getHealthStatus(): HealthStatus | null {
+    if (!this.healthServer) return null;
+    return this.healthServer.getHealthStatus();
+  }
+
+  /** Shutdown all agents, health server, and close ledger */
   shutdown(): void {
     for (const agent of this.activeAgents) {
       agent.stop();
@@ -144,6 +162,12 @@ export class Orchestrator {
       this.activeLedger = null;
     }
     this.activeBus = null;
+
+    if (this.healthServer) {
+      this.healthServer.stop().catch(() => {});
+      this.healthServer = null;
+    }
+
     log.info('Orchestrator shutdown');
   }
 
@@ -153,14 +177,35 @@ export class Orchestrator {
 
     switch (template) {
       case 'single-worker': {
-        const builder = new BuilderAgent(BuilderAgent.createConfig(), bus, this.claude);
+        // No planner — builder triggers directly on ISSUE_OPENED
+        const builder = new BuilderAgent(
+          BuilderAgent.createConfig({
+            triggers: [
+              { topic: 'ISSUE_OPENED', action: 'execute_task' },
+              { topic: 'WORKER_PROGRESS', action: 'execute_task', logic: { engine: 'javascript', script: 'return message.sender === "builder";' } },
+            ],
+          }),
+          bus,
+          this.claude,
+        );
         builder.start();
         this.activeAgents.push(builder);
         break;
       }
 
       case 'worker-validator': {
-        const builder = new BuilderAgent(BuilderAgent.createConfig(), bus, this.claude);
+        // No planner — builder triggers directly on ISSUE_OPENED
+        const builder = new BuilderAgent(
+          BuilderAgent.createConfig({
+            triggers: [
+              { topic: 'ISSUE_OPENED', action: 'execute_task' },
+              { topic: 'WORKER_PROGRESS', action: 'execute_task', logic: { engine: 'javascript', script: 'return message.sender === "builder";' } },
+              { topic: 'VALIDATION_RESULT', action: 'execute_task', logic: { engine: 'javascript', script: 'return message.content.data?.approved === false;' } },
+            ],
+          }),
+          bus,
+          this.claude,
+        );
         const reviewer = new ReviewerAgent(ReviewerAgent.createConfig(), bus, this.gitManager);
         builder.start();
         reviewer.start();

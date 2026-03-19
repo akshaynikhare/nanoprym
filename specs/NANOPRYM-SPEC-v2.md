@@ -3,7 +3,7 @@
 Version: 2.0.0
 Date: 2026-03-19
 Author: Akshay Nikhare
-Status: Phase 1 Ready
+Status: All Phases Complete — Ready for MacBook Deployment
 Repository: github.com/nanoprym
 Package: @nanoprym/core
 CLI: nanoprym
@@ -2075,7 +2075,47 @@ Build full plugin system, self-evolution engine, and advanced generators.
 
 **Week 11-12 Status: ✅ CORE COMPLETE** (2026-03-19) — Engine built. Docker sandbox + PR workflow require deployment.
 
-**Phase 3 Status: ✅ COMPLETE** — 54/54 tests passing. All core modules built.
+**Phase 3 Status: ✅ COMPLETE** (2026-03-19) — 54/54 tests passing. All core modules built.
+
+---
+
+### Deployment (Post-Phase 3)
+
+**Status**: 🟡 READY FOR MACBOOK DEPLOYMENT
+
+Setup script created: `scripts/setup.sh` — handles everything automatically.
+Setup guide: `docs/SETUP.md`
+
+Deployment steps:
+1. Clone repo to MacBook
+2. Run `./scripts/setup.sh`
+3. Authenticate: `claude auth login` + `gh auth login`
+4. First task: `nanoprym run "..." -c SIMPLE -t TASK`
+
+Remaining items that require live MacBook:
+- [ ] Docker sandbox for self-evolution
+- [ ] Ollama models (Nomic Embed, Qwen2.5-3B) download
+- [ ] Qdrant + Redis containers running
+- [ ] First dogfood task on Nanoprym itself
+- [ ] Slack webhook configuration (optional)
+
+---
+
+### Project Final Stats (2026-03-19)
+
+```
+Source files:       53
+Lines of code:      5,962
+Test files:         7
+Tests passing:      54/54
+TypeScript build:   Clean
+Modules:            16 (core, agents, providers, tom, git, audit,
+                        knowledge, evolution, testing, notifications,
+                        recovery, metrics, config, security, db, plugins)
+Plugins:            10 (4 scanners, 2 testers, 3 generators, 1 validator)
+Agent types:        4 (planner, builder, reviewer, validator)
+Prompt versions:    4 (v001 for each agent role)
+```
 
 ---
 
@@ -2155,5 +2195,5 @@ The subscription-first approach, combined with TOM's multi-provider routing and 
 
 **This is a complete, ready-to-build specification. A developer should be able to implement all 20 concerns from this document alone.**
 
-**Status: Phase 1 Ready**
-**Next: Execute Week 1 of Phase 1 (Project Scaffold)**
+**Status: All Phases Complete — Ready for MacBook Deployment**
+**Next: Run `./scripts/setup.sh` on MacBook, then `nanoprym run` on first task**

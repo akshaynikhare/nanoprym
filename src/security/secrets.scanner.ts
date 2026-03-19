@@ -21,7 +21,7 @@ const SECRET_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
   { name: 'AWS Secret Key', pattern: /(?:aws_secret_access_key|secret_key)\s*[:=]\s*['"]?[A-Za-z0-9/+=]{40}/gi },
   { name: 'GitHub Token', pattern: /gh[pousr]_[A-Za-z0-9_]{36,}/g },
   { name: 'Generic API Key', pattern: /(?:api[_-]?key|apikey)\s*[:=]\s*['"]?[A-Za-z0-9_-]{20,}/gi },
-  { name: 'Generic Secret', pattern: /(?:secret|password|passwd|token)\s*[:=]\s*['"]?[A-Za-z0-9_-!@#$%^&*]{8,}/gi },
+  { name: 'Generic Secret', pattern: /(?:secret|password|passwd|token)\s*[:=]\s*['"]?[A-Za-z0-9_!@#$%^&*-]{8,}/gi },
   { name: 'Private Key', pattern: /-----BEGIN (?:RSA |EC |DSA )?PRIVATE KEY-----/g },
   { name: 'JWT Token', pattern: /eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}/g },
   { name: 'Anthropic Key', pattern: /sk-ant-[A-Za-z0-9_-]{20,}/g },

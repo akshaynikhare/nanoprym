@@ -41,6 +41,9 @@ export const SNAPSHOT_LIMITS = {
 export const TOM_SOCKET_PATH = '/tmp/nanoprym-tom.sock';
 export const TOM_CLOUD_BUDGET_USD = 5.00;
 
+// ── HTTP ─────────────────────────────────────────────────────
+export const HEALTH_CHECK_PORT = 9090;
+
 // ── Git ──────────────────────────────────────────────────────
 export const GIT_BRANCH_PREFIX = 'nanoprym/';
 export const CONVENTIONAL_COMMIT_TYPES = [
