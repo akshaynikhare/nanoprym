@@ -1,0 +1,125 @@
+# Nanoprym Configuration
+version: "2.0"
+
+# Hardware
+hardware:
+  ram_gb: 16
+  gpu: "apple-metal"
+
+# Providers
+providers:
+  builder:
+    name: claude
+    model: sonnet
+    subscription: claude-max
+    max_turns: 20
+    timeout_ms: 300000
+  reviewer:
+    name: copilot
+    fallback: claude-sonnet
+    blind_review: true
+  planner:
+    name: claude
+    model: sonnet
+    subscription: claude-max
+    max_turns: 10
+    timeout_ms: 180000
+
+# TOM (Token Optimization Module)
+tom:
+  enabled: true
+  sidecar_socket: /tmp/nanoprym-tom.sock
+  compression:
+    layer1_rules: true
+    layer2_spacy: true
+    layer3_cache: true
+  routing:
+    bypass_first_gen: true
+    bypass_complex: true
+    compress_iterations: true
+    route_auxiliary: true
+  cloud_budget_monthly_usd: 5.00
+  providers:
+    - name: gemini-free
+      tier: 1
+      models: ["gemini-2.5-flash", "flash-lite"]
+    - name: deepseek
+      tier: 2
+      models: ["deepseek-v3.2"]
+    - name: ollama-local
+      tier: 3
+      models: ["qwen2.5-coder:3b-q4"]
+
+# Task Management
+tasks:
+  max_concurrent: 1
+  max_iterations: 5
+  retry_attempts: 3
+  stuck_detection:
+    enabled: true
+    threshold_score: 3.5
+
+# Git
+git:
+  worktree_isolation: true
+  conventional_commits: true
+  auto_pr: true
+  branch_prefix: "nanoprym/"
+
+# Audit
+audit:
+  ledger_dir: "~/.nanoprym/ledgers"
+  retention: forever
+
+# Knowledge Base
+knowledge_base:
+  qdrant:
+    host: localhost
+    port: 6333
+    collection: nanoprym-kb
+  embedding:
+    provider: ollama
+    model: nomic-embed-text
+  dedup_threshold: 0.92
+
+# Context Budgets (tokens)
+context:
+  planner: 100000
+  builder: 200000
+  reviewer: 50000
+  validator: 50000
+
+# Testing
+testing:
+  coverage_overall: 60
+  coverage_branch: 80
+  runner: vitest
+
+# Notifications
+notifications:
+  slack:
+    enabled: false  # Enable after Slack app setup
+    channels:
+      auto: "#nanoprym-auto"
+      decisions: "#nanoprym-decisions"
+      failures: "#nanoprym-failures"
+      daily: "#nanoprym-daily"
+
+# Scanner plugins (run order)
+scanners:
+  on_commit: [eslint, jscpd]
+  on_pr: [semgrep, trivy]
+  weekly: [lighthouse, madge]
+
+# Evolution
+evolution:
+  enabled: false  # Enable in Phase 3
+  frequency: weekly
+  min_signals: 5
+  auto_revert_after_tasks: 25
+  sandbox: docker
+
+# Dashboard
+dashboard:
+  port: 3000
+  enabled: false  # Enable in Phase 2

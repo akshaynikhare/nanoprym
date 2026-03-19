@@ -1,0 +1,38 @@
+{
+  "version": "1.0.0",
+  "naming": {
+    "files": "kebab-case",
+    "classes": "PascalCase",
+    "functions": "camelCase",
+    "constants": "UPPER_SNAKE",
+    "types": "PascalCase",
+    "db_tables": "snake_case",
+    "directories": "kebab-case",
+    "tests": "{name}.test.ts",
+    "prompts": "{role}.system.md",
+    "brains": "{name}.brain.md",
+    "kb_entries": "KB-{N}-{slug}.md"
+  },
+  "dry": {
+    "threshold": 3,
+    "extract_to": "_shared/"
+  },
+  "quality": {
+    "max_function_lines": 50,
+    "coverage_overall": 60,
+    "coverage_branch": 80,
+    "no_todo_comments": true,
+    "no_any_casts": true,
+    "explicit_return_types": true
+  },
+  "review": {
+    "blind_validation": true,
+    "max_iterations": 2,
+    "evidence_required": true,
+    "instant_reject": [
+      "TODO", "FIXME", "HACK", "XXX",
+      "phase 2", "will add later",
+      "as any", "eslint-disable"
+    ]
+  }
+}
