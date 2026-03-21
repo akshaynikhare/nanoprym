@@ -2,7 +2,7 @@
 
 Self-evolving AI agent orchestration system. Scans repos, finds bugs/improvements, auto-fixes, proposes features, builds approved tasks via multi-agent pipeline, and evolves its own prompts over time.
 
-**Current Stage**: Post-Phase 3 — Local Dogfood Pipeline Ready
+**Current Stage**: Post-Phase 4 — First Dogfood Run Complete
 **Version**: 0.1.0
 **Stats**: 69 source files, ~11,000 LOC, 172/172 tests passing, 18 modules, 18 plugins, 4 agent types
 **Spec**: `specs/NANOPRYM-SPEC-v2.md` (authoritative, all decisions/architecture live here)

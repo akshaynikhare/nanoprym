@@ -2,7 +2,7 @@
 
 ## Deployment (requires MacBook)
 
-- [ ] First dogfood run — `nanoprym run "task" -c SIMPLE -t TASK`, verify full pipeline through dashboard merge/reject
+- [x] First dogfood run — full pipeline verified: Builder → Reviewer → CLUSTER_COMPLETE → Awaiting Review in dashboard
 
 ## Deferred to Production
 
@@ -52,3 +52,5 @@
 - [x] Multi-repo support — RepoManager (clone/register/list/remove), CLI `nanoprym repo add/list/remove`, `--repo` flag on `run`, API endpoints GET/POST /api/repos, per-project ledgers/KB/brain isolation via ProjectManager, 14 tests
 - [x] LearningEngine wired into orchestrator — self-evolution loop connected (CLUSTER_COMPLETE → signal tracking → pattern detection → rule extraction)
 - [x] Evolution + Dashboard enabled in config — `evolution.enabled: true`, `dashboard.enabled: true`
+- [x] Dogfood pipeline bugfixes — 4 bugs fixed: (1) worker-validator/debug-workflow contextStrategy required PLAN_READY without a planner, (2) builder onComplete hook logic returned falsy on success (moved topic redirect from `logic` to `transform`), (3) agent result `data` lost during publish (result.data now included in message data field), (4) sandbox.isAvailable() didn't check image exists
+- [x] Makefile `make stop` — now kills both tsx and compiled server processes, port-based fallback kill

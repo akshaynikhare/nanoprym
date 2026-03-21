@@ -149,7 +149,10 @@ export abstract class BaseAgent {
       taskId: triggeringMessage.taskId,
       topic,
       sender: this.id,
-      content: content ?? { text: JSON.stringify(result) },
+      content: content ?? {
+        text: result.summary ?? JSON.stringify(result),
+        data: result.data as Record<string, unknown> | undefined,
+      },
     });
 
     this.log.info('Result published', { topic, iteration: this.iteration });

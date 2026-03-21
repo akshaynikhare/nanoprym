@@ -458,6 +458,16 @@ export class Orchestrator {
               { topic: 'WORKER_PROGRESS', action: 'execute_task', logic: { engine: 'javascript', script: 'return message.sender === "builder";' } },
               { topic: 'VALIDATION_RESULT', action: 'execute_task', logic: { engine: 'javascript', script: 'return message.content.data?.approved === false;' } },
             ],
+            contextStrategy: {
+              sources: [
+                { topic: 'ISSUE_OPENED', priority: 'required', strategy: 'latest', amount: 1 },
+                { topic: 'STATE_SNAPSHOT', priority: 'required', strategy: 'latest', amount: 1 },
+                { topic: 'WORKER_PROGRESS', priority: 'medium', strategy: 'latest', amount: 3, since: 'last_task_end' },
+                { topic: 'VALIDATION_RESULT', priority: 'high', strategy: 'latest', amount: 10, since: 'last_task_end' },
+              ],
+              format: 'chronological',
+              maxTokens: 200_000,
+            },
           }),
           bus,
           this.claude,
@@ -497,6 +507,16 @@ export class Orchestrator {
                 },
               },
             ],
+            contextStrategy: {
+              sources: [
+                { topic: 'ISSUE_OPENED', priority: 'required', strategy: 'latest', amount: 1 },
+                { topic: 'STATE_SNAPSHOT', priority: 'required', strategy: 'latest', amount: 1 },
+                { topic: 'WORKER_PROGRESS', priority: 'medium', strategy: 'latest', amount: 3, since: 'last_task_end' },
+                { topic: 'VALIDATION_RESULT', priority: 'high', strategy: 'latest', amount: 10, since: 'last_task_end' },
+              ],
+              format: 'chronological',
+              maxTokens: 200_000,
+            },
           }),
           bus,
           this.claude,

@@ -63,7 +63,11 @@ start: build ## Start Nanoprym daemon only (API + health)
 
 stop: ## Stop Nanoprym daemon + dashboard
 	@echo "$(YELLOW)Stopping Nanoprym...$(RESET)"
-	@pkill -f "cli.entry.js serve" 2>/dev/null || echo "Not running"
+	@pkill -f "cli.entry.js serve" 2>/dev/null || true
+	@pkill -f "cli.entry.ts serve" 2>/dev/null || true
+	@lsof -ti :9091 | xargs kill 2>/dev/null || true
+	@lsof -ti :9092 | xargs kill 2>/dev/null || true
+	@echo "$(GREEN)Nanoprym stopped$(RESET)"
 
 status: ## Show orchestrator health
 	node dist/cli/cli.entry.js health

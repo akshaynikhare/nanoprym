@@ -2003,10 +2003,10 @@ Tasks:
 - [x] Setup Slack Bolt.js bot (Socket Mode, Block Kit approval buttons, threaded lifecycle, legacy fallback) ✅ slack.bot.ts + task-actions.ts
 - [x] Create CLI entry point (nanoprym run/resume/status/tom/audit/config) ✅
 - [x] Write integration tests (config, secrets, pipeline flow, crash recovery) ✅ (45 tests total)
-- [ ] Dogfood: Have Nanoprym build a real issue in itself — requires MacBook deployment
+- [x] Dogfood: First successful end-to-end pipeline run (2026-03-21) — Builder → Reviewer → CLUSTER_COMPLETE → Awaiting Review ✅
 - [ ] Document Phase 1 findings + fixes needed for Phase 2
 
-**Week 4 Status: ✅ CORE COMPLETE** (2026-03-19) — 45/45 tests. Slack + dogfood require deployment.
+**Week 4 Status: ✅ COMPLETE** (2026-03-21) — 45/45 tests. Dogfood pipeline verified end-to-end.
 
 ---
 
@@ -2138,8 +2138,9 @@ Completed deployment items:
 - [x] Task API endpoints — GET/POST /api/tasks, /api/tasks/:id, /api/tasks/:id/diff, merge, reject ✅
 - [x] All dogfooding uses Dashboard merge/reject — no auto-merge for any complexity ✅
 
-Remaining items:
-- [ ] First dogfood run end-to-end — `nanoprym run "task"` through dashboard merge
+- [x] First dogfood run end-to-end (2026-03-21) — full pipeline: Builder → Reviewer → Awaiting Review in dashboard ✅
+- [x] Dogfood bugfixes — worker-validator missing PLAN_READY context, builder hook logic falsy on success, agent result data lost during publish, sandbox image check ✅
+- [x] Makefile `make stop` — kills tsx/compiled processes + port-based fallback ✅
 
 ---
 

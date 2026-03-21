@@ -38,10 +38,11 @@ export class SandboxManager {
     this.repoRoot = repoRoot;
   }
 
-  /** Check if Docker is available */
+  /** Check if Docker is available and sandbox image exists */
   isAvailable(): boolean {
     try {
       execSync('docker info', { stdio: 'ignore', timeout: 5000 });
+      execSync(`docker image inspect ${SANDBOX_IMAGE}`, { stdio: 'ignore', timeout: 5000 });
       return true;
     } catch {
       return false;

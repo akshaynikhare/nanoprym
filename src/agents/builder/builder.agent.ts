@@ -77,7 +77,7 @@ export class BuilderAgent extends BaseAgent {
         onComplete: {
           action: 'publish_message',
           config: { topic: 'IMPLEMENTATION_READY' },
-          logic: {
+          transform: {
             engine: 'javascript',
             script: 'if (!result.completionStatus?.canValidate) return { topic: "WORKER_PROGRESS" };',
           },
