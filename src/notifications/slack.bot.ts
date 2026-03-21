@@ -1,5 +1,5 @@
 /**
- * Slack Bot — Notifications and human-in-loop via Slack
+ * Slack Bot — Notifications, human-in-loop, and task creation via Slack
  *
  * Channels:
  * - #nanoprym-auto: auto-fix logs (bug/security/test)
@@ -7,15 +7,24 @@
  * - #nanoprym-failures: failed tasks with reports
  * - #nanoprym-daily: summary (only when something happened)
  *
+ * Task creation:
+ * - @mention nanoprym in any channel with a task description
+ * - Bot replies in thread, asks which repo to target
+ * - User replies with repo choice, task starts
+ * - All lifecycle updates post to that thread
+ *
  * Uses Bolt.js in Socket Mode for interactive approval workflows.
  * Falls back to legacy webhook posting if bot tokens are not configured.
  */
 import { App, type BlockAction } from '@slack/bolt';
 import type { EventBus } from '../core/event-bus.js';
-import type { Message } from '../_shared/types.js';
+import type { Message, TaskComplexity, TaskType } from '../_shared/types.js';
 import { createChildLogger } from '../_shared/logger.js';
 
 const log = createChildLogger('slack-bot');
+
+const PENDING_MENTION_TTL_MS = 30 * 60 * 1000; // 30 minutes
+const PENDING_CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
 
 export interface SlackConfig {
   enabled: boolean;
@@ -29,16 +38,49 @@ export interface SlackConfig {
   };
 }
 
+export interface RepoInfo {
+  name: string;
+  repoPath: string;
+  repoUrl?: string;
+}
+
+export interface TaskInput {
+  title: string;
+  description: string;
+  complexity: TaskComplexity;
+  taskType: TaskType;
+  source: string;
+  repoName?: string;
+}
+
 export interface SlackTaskActions {
   merge: (taskId: string) => Promise<void>;
   reject: (taskId: string) => Promise<void>;
+  startTask?: (task: TaskInput) => Promise<string>;
+  listRepos?: () => RepoInfo[];
+}
+
+interface ThreadInfo {
+  channel: string;
+  threadTs: string;
+}
+
+interface PendingMention {
+  channel: string;
+  threadTs: string;
+  userId: string;
+  description: string;
+  repos: RepoInfo[];
+  createdAt: number;
 }
 
 export class SlackBot {
   private config: SlackConfig;
   private actions: SlackTaskActions;
   private app: App | null = null;
-  private threadMap: Map<string, string> = new Map();
+  private threadMap: Map<string, ThreadInfo> = new Map();
+  private pendingMentions: Map<string, PendingMention> = new Map();
+  private cleanupInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(config: SlackConfig, actions: SlackTaskActions) {
     const envWebhook = process.env.SLACK_WEBHOOK_URL;
@@ -74,17 +116,26 @@ export class SlackBot {
     });
 
     this.registerActions();
+    this.registerMentionHandler();
     await this.app.start();
+
+    this.cleanupInterval = setInterval(() => this.cleanupPendingMentions(), PENDING_CLEANUP_INTERVAL_MS);
+
     log.info('Slack bot started in Socket Mode');
   }
 
   /** Stop the Bolt.js app */
   async stop(): Promise<void> {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
     if (this.app) {
       await this.app.stop();
       log.info('Slack bot stopped');
     }
     this.threadMap.clear();
+    this.pendingMentions.clear();
   }
 
   /** Subscribe to event bus and auto-post to appropriate channels */
@@ -97,9 +148,14 @@ export class SlackBot {
     bus.subscribeTopic('WORKER_PROGRESS', (msg) => {
       const phase = msg.content.data?.phase as string | undefined;
       if (phase === 'task_started') {
-        this.postToChannel('decisions', `*Task started*: ${msg.content.text.slice(0, 200)}`).then(ts => {
-          if (ts) this.threadMap.set(msg.taskId, ts);
-        });
+        // If thread already exists (from @mention), post there; otherwise create new thread
+        if (this.threadMap.has(msg.taskId)) {
+          this.postToThread(msg.taskId, 'decisions', `*Task started*: ${msg.content.text.slice(0, 200)}`);
+        } else {
+          this.postToChannel('decisions', `*Task started*: ${msg.content.text.slice(0, 200)}`).then(ts => {
+            if (ts) this.threadMap.set(msg.taskId, { channel: this.config.channels.decisions, threadTs: ts });
+          });
+        }
       } else if (phase === 'testing') {
         this.postToThread(msg.taskId, 'decisions', 'Running tests...');
       }
@@ -205,6 +261,157 @@ export class SlackBot {
     });
   }
 
+  // ── @mention handler ──────────────────────────────────────────
+
+  private registerMentionHandler(): void {
+    if (!this.app) return;
+
+    // Handle @nanoprym mentions — start a task creation thread
+    this.app.event('app_mention', async ({ event, say }) => {
+      try {
+        await this.handleMention(event as { text: string; user: string; channel: string; ts: string }, say);
+      } catch (err) {
+        log.error('Mention handler failed', { error: String(err) });
+      }
+    });
+
+    // Handle thread replies — repo selection for pending mentions
+    this.app.event('message', async ({ event }) => {
+      try {
+        const msg = event as { text?: string; user?: string; thread_ts?: string; bot_id?: string; subtype?: string };
+        // Ignore bot messages to avoid self-reply loops
+        if (msg.bot_id || msg.subtype) return;
+        if (!msg.thread_ts || !msg.text || !msg.user) return;
+
+        await this.handleThreadReply(msg.thread_ts, msg.text, msg.user);
+      } catch (err) {
+        log.error('Thread reply handler failed', { error: String(err) });
+      }
+    });
+  }
+
+  private async handleMention(
+    event: { text: string; user: string; channel: string; ts: string },
+    say: (args: { text: string; thread_ts: string }) => Promise<unknown>,
+  ): Promise<void> {
+    // Strip the @mention prefix to get the task description
+    const description = event.text.replace(/<@[A-Z0-9]+>/g, '').trim();
+
+    if (!description) {
+      await say({ text: 'What would you like me to work on? Mention me with a task description.', thread_ts: event.ts });
+      return;
+    }
+
+    if (!this.actions.listRepos) {
+      await say({ text: 'Task creation via Slack is not configured.', thread_ts: event.ts });
+      return;
+    }
+
+    const repos = this.actions.listRepos();
+
+    if (repos.length === 0) {
+      await say({
+        text: 'No repos registered. Use `nanoprym repo add <url|path>` to register a repo first.',
+        thread_ts: event.ts,
+      });
+      return;
+    }
+
+    // Single repo — skip selection, start immediately
+    if (repos.length === 1) {
+      await say({
+        text: `Starting task on *${repos[0].name}*...\n> ${description}`,
+        thread_ts: event.ts,
+      });
+      await this.createTaskFromMention(event.channel, event.ts, description, repos[0].name);
+      return;
+    }
+
+    // Multiple repos — ask user to pick
+    const repoList = repos.map((r, i) => `*${i + 1}.* \`${r.name}\`${r.repoUrl ? ` — ${r.repoUrl}` : ''}`).join('\n');
+
+    await say({
+      text: `Which repo should I work on?\n\n${repoList}\n\nReply with the number or repo name.`,
+      thread_ts: event.ts,
+    });
+
+    this.pendingMentions.set(event.ts, {
+      channel: event.channel,
+      threadTs: event.ts,
+      userId: event.user,
+      description,
+      repos,
+      createdAt: Date.now(),
+    });
+
+    log.info('Pending mention stored', { threadTs: event.ts, user: event.user, repoCount: repos.length });
+  }
+
+  private async handleThreadReply(threadTs: string, text: string, _userId: string): Promise<void> {
+    const pending = this.pendingMentions.get(threadTs);
+    if (!pending) return;
+
+    const input = text.trim();
+
+    // Try to match by number
+    const num = parseInt(input, 10);
+    let repoName: string | undefined;
+
+    if (!isNaN(num) && num >= 1 && num <= pending.repos.length) {
+      repoName = pending.repos[num - 1].name;
+    } else {
+      // Try to match by name (case-insensitive)
+      const match = pending.repos.find(r => r.name.toLowerCase() === input.toLowerCase());
+      if (match) repoName = match.name;
+    }
+
+    if (!repoName) {
+      await this.postToChannelDirect(pending.channel, `Invalid selection: \`${input}\`. Reply with a number (1-${pending.repos.length}) or repo name.`, threadTs);
+      return;
+    }
+
+    this.pendingMentions.delete(threadTs);
+    await this.postToChannelDirect(pending.channel, `Starting task on *${repoName}*...\n> ${pending.description}`, threadTs);
+    await this.createTaskFromMention(pending.channel, threadTs, pending.description, repoName);
+  }
+
+  private async createTaskFromMention(channel: string, threadTs: string, description: string, repoName: string): Promise<void> {
+    if (!this.actions.startTask) {
+      log.warn('startTask not configured');
+      return;
+    }
+
+    try {
+      const taskId = await this.actions.startTask({
+        title: description.slice(0, 80),
+        description,
+        complexity: 'SIMPLE',
+        taskType: 'TASK',
+        source: 'slack',
+        repoName,
+      });
+
+      // Map taskId to originating thread so lifecycle events post there
+      this.threadMap.set(taskId, { channel, threadTs });
+
+      await this.postToChannelDirect(channel, `Task \`${taskId.slice(0, 8)}\` created. I'll post updates here.`, threadTs);
+      log.info('Task created from Slack mention', { taskId, repoName, channel });
+    } catch (err) {
+      await this.postToChannelDirect(channel, `Failed to create task: ${String(err)}`, threadTs);
+      log.error('Task creation from mention failed', { error: String(err) });
+    }
+  }
+
+  private cleanupPendingMentions(): void {
+    const now = Date.now();
+    for (const [key, pending] of this.pendingMentions) {
+      if (now - pending.createdAt > PENDING_MENTION_TTL_MS) {
+        this.pendingMentions.delete(key);
+        log.debug('Expired pending mention', { threadTs: key });
+      }
+    }
+  }
+
   // ── Block Kit approval message ──────────────────────────────
 
   private async postApprovalMessage(msg: Message): Promise<void> {
@@ -246,21 +453,24 @@ export class SlackBot {
 
     if (this.app) {
       try {
-        const threadTs = this.threadMap.get(taskId);
+        const threadInfo = this.threadMap.get(taskId);
+        const channel = threadInfo?.channel ?? this.config.channels.decisions;
+        const threadTs = threadInfo?.threadTs;
+
         const result = await this.app.client.chat.postMessage({
-          channel: this.config.channels.decisions,
+          channel,
           text: `Task ${taskId} ready for review`,
           blocks,
           ...(threadTs ? { thread_ts: threadTs } : {}),
         });
         if (result.ts && !this.threadMap.has(taskId)) {
-          this.threadMap.set(taskId, result.ts);
+          this.threadMap.set(taskId, { channel, threadTs: result.ts });
         }
       } catch (err) {
         log.warn('Failed to post approval message', { taskId, error: String(err) });
       }
     } else {
-      await this.postViaWebhook('decisions', `🔔 *Task ready for review*: \`${taskId}\` on branch \`${branch}\``);
+      await this.postViaWebhook('decisions', `*Task ready for review*: \`${taskId}\` on branch \`${branch}\``);
     }
   }
 
@@ -289,25 +499,40 @@ export class SlackBot {
     return undefined;
   }
 
-  private async postToThread(taskId: string, channel: keyof SlackConfig['channels'], text: string): Promise<void> {
+  /** Post to a specific channel ID + thread (for @mention threads that aren't in config channels) */
+  private async postToChannelDirect(channelId: string, text: string, threadTs?: string): Promise<void> {
+    if (!this.app) return;
+    try {
+      await this.app.client.chat.postMessage({
+        channel: channelId,
+        text,
+        ...(threadTs ? { thread_ts: threadTs } : {}),
+      });
+    } catch (err) {
+      log.warn('Slack direct post failed', { channelId, error: String(err) });
+    }
+  }
+
+  private async postToThread(taskId: string, fallbackChannel: keyof SlackConfig['channels'], text: string): Promise<void> {
     if (!this.config.enabled) return;
 
-    const threadTs = this.threadMap.get(taskId);
+    const threadInfo = this.threadMap.get(taskId);
 
     if (this.app) {
       try {
+        const channel = threadInfo?.channel ?? this.config.channels[fallbackChannel];
         await this.app.client.chat.postMessage({
-          channel: this.config.channels[channel],
+          channel,
           text,
-          ...(threadTs ? { thread_ts: threadTs } : {}),
+          ...(threadInfo?.threadTs ? { thread_ts: threadInfo.threadTs } : {}),
         });
       } catch (err) {
-        log.warn('Slack thread post failed', { taskId, channel, error: String(err) });
+        log.warn('Slack thread post failed', { taskId, fallbackChannel, error: String(err) });
       }
       return;
     }
 
-    await this.postViaWebhook(channel, text);
+    await this.postViaWebhook(fallbackChannel, text);
   }
 
   /** Legacy webhook posting (fallback when Bolt.js tokens not configured) */
@@ -343,11 +568,11 @@ export class SlackBot {
   }
 
   private formatDecision(msg: Message): string {
-    return `🔔 *Decision needed*: ${msg.content.text.slice(0, 200)}`;
+    return `*Decision needed*: ${msg.content.text.slice(0, 200)}`;
   }
 
   private formatScanFailure(msg: Message): string {
     const errors = (msg.content.data?.errors as string[]) ?? [];
-    return `⚠️ *Scanner failed*: ${errors.length} issues found\n${errors.slice(0, 3).join('\n')}`;
+    return `*Scanner failed*: ${errors.length} issues found\n${errors.slice(0, 3).join('\n')}`;
   }
 }

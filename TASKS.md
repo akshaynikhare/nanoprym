@@ -11,7 +11,8 @@
 - [x] Scanners: Ruff, Lighthouse, Madge — all implemented, registered in plugin loader, JSON output parsing, severity classification
 - [x] Testers: Hurl, k6 — TesterPlugin implementations, JSON report parsing (Hurl --report-json, k6 --summary-export), text fallback, TESTER_REGISTRY + getRegisteredTesters/getAvailableTesters/runAllTesters in plugin loader, 13 tests
 - [x] Generators: OpenAPI, Docker, Deployment Guide — 3 generator plugins + 22 tests
-- [ ] Evolution PR workflow (sandbox → PR → human review → merge)
+- [x] Evolution PR workflow — EvolutionPRWorkflow (pattern → rule extraction → git branch → commit → push → PR → Copilot review → RollbackManager registration), brain file updates, CLI `nanoprym evolve`, 18 tests
+- [x] Autonomous scanning loop — ScanScheduler (interval-based repo scanning, dedup cache with 24h window, severity-based task complexity, configurable max tasks per cycle), CLI `nanoprym scan`, config `scanning:` section, wired into orchestrator, 13 tests
 - [x] Rollback with cascade detection — RollbackManager (evolution registry, dependency-aware cascade detection, git revert, failed-approach rules), CLI `nanoprym rollback run/list/cascade`, 22 tests
 
 ## Completed
@@ -54,3 +55,4 @@
 - [x] Evolution + Dashboard enabled in config — `evolution.enabled: true`, `dashboard.enabled: true`
 - [x] Dogfood pipeline bugfixes — 4 bugs fixed: (1) worker-validator/debug-workflow contextStrategy required PLAN_READY without a planner, (2) builder onComplete hook logic returned falsy on success (moved topic redirect from `logic` to `transform`), (3) agent result `data` lost during publish (result.data now included in message data field), (4) sandbox.isAvailable() didn't check image exists
 - [x] Makefile `make stop` — now kills both tsx and compiled server processes, port-based fallback kill
+- [x] Slack @mention task creation — `@nanoprym` mention → threaded conversation, repo selection, task lifecycle in thread, threadMap refactored to per-task channel routing, pendingMentions with TTL cleanup, manifest updated with event scopes

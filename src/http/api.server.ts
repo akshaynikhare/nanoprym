@@ -492,6 +492,7 @@ export class ApiServer {
             testsPassed,
             testsFailed,
             repoName: issueMsg?.content.data?.repoName as string | undefined,
+            source: (issueMsg?.content.data?.source as string) ?? 'cli',
           });
 
           ledger.close();

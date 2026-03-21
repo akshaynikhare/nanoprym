@@ -114,6 +114,14 @@ scanners:
   on_pr: [semgrep, trivy]
   weekly: [lighthouse, madge]
 
+# Autonomous Scanning
+scanning:
+  enabled: true
+  interval_minutes: 60
+  max_tasks_per_scan: 3
+  # repos: []   # empty = all registered repos
+  # scanners: [] # empty = all available scanners
+
 # Evolution
 evolution:
   enabled: true

@@ -22,7 +22,9 @@ import { SlackBot, type SlackTaskActions } from '../notifications/slack.bot.js';
 import { mergeTask, rejectTask } from './task-actions.js';
 import { InboxWatcher } from './inbox-watcher.js';
 import { LearningEngine } from '../evolution/learning.engine.js';
+import { EvolutionPRWorkflow } from '../evolution/evolution-pr.js';
 import { RepoManager } from '../repos/repo.manager.js';
+import { ScanScheduler } from './scan-scheduler.js';
 import type { TaskComplexity, TaskType, Message, NotificationsConfig, DetailedHealthStatus } from '../_shared/types.js';
 import { createChildLogger } from '../_shared/logger.js';
 import { LEDGER_DIR } from '../_shared/constants.js';
@@ -55,6 +57,8 @@ export class Orchestrator {
   private inboxWatcher: InboxWatcher | null = null;
   private db: DatabaseClient | null = null;
   private repoManager: RepoManager;
+  private scanScheduler: ScanScheduler | null = null;
+  private evolutionPR: EvolutionPRWorkflow | null = null;
   private ledgerBaseDir: string;
   private claude: ClaudeProvider;
   private gitManager: GitManager;
@@ -105,6 +109,8 @@ export class Orchestrator {
       const taskActions: SlackTaskActions = {
         merge: (taskId) => mergeTask(taskId, { gitManager: this.gitManager, ledgerBaseDir: this.ledgerBaseDir }),
         reject: (taskId) => rejectTask(taskId, { gitManager: this.gitManager, ledgerBaseDir: this.ledgerBaseDir }),
+        startTask: (task) => this.startTask(task),
+        listRepos: () => this.repoManager.list(),
       };
 
       this.slackBot = new SlackBot(options.notifications.slack, taskActions);
@@ -121,6 +127,28 @@ export class Orchestrator {
 
     // Initialize inbox watcher for human decisions via ~/.nanoprym/inbox.md
     this.inboxWatcher = new InboxWatcher(options?.configDir);
+
+    // Initialize autonomous scan scheduler
+    this.scanScheduler = new ScanScheduler({
+      intervalMs: 60 * 60 * 1000, // 1 hour default, overridden by config
+      maxTasksPerScan: 3,
+      onFinding: async (finding) => {
+        return this.startTask({
+          title: finding.summary,
+          description: finding.details,
+          complexity: finding.complexity,
+          taskType: finding.taskType,
+          source: `scanner:${finding.scanner}`,
+          repoName: finding.repoName,
+        });
+      },
+    });
+    this.scanScheduler.start();
+
+    // Initialize evolution PR workflow
+    this.evolutionPR = new EvolutionPRWorkflow({
+      repoRoot: options?.repoRoot ?? process.cwd(),
+    });
   }
 
   /** Start a new task — creates ledger, agents, and kicks off pipeline */
@@ -156,7 +184,21 @@ export class Orchestrator {
 
     // Wire learning engine for self-evolution tracking
     // LearningEngine auto-subscribes to EventBus (fire-and-forget like StateSnapshotter)
-    new LearningEngine(this.activeBus);
+    const learningEngine = new LearningEngine(this.activeBus);
+
+    // Wire evolution PR workflow — check for patterns after each task completes
+    if (this.evolutionPR) {
+      const evoPR = this.evolutionPR;
+      this.activeBus.subscribeTopic('CLUSTER_COMPLETE', async () => {
+        const patterns = learningEngine.getPatterns();
+        if (patterns.length > 0) {
+          const result = await evoPR.processPatterns(patterns);
+          if (result) {
+            log.info('Evolution PR created', { version: result.version, prUrl: result.prUrl });
+          }
+        }
+      });
+    }
 
     // Attach event bus to API server for SSE streaming
     if (this.apiServer) {
@@ -395,6 +437,11 @@ export class Orchestrator {
     if (this.db) {
       this.db.close();
       this.db = null;
+    }
+
+    if (this.scanScheduler) {
+      this.scanScheduler.stop();
+      this.scanScheduler = null;
     }
 
     if (this.slackBot) {

@@ -2141,6 +2141,7 @@ Completed deployment items:
 - [x] First dogfood run end-to-end (2026-03-21) — full pipeline: Builder → Reviewer → Awaiting Review in dashboard ✅
 - [x] Dogfood bugfixes — worker-validator missing PLAN_READY context, builder hook logic falsy on success, agent result data lost during publish, sandbox image check ✅
 - [x] Makefile `make stop` — kills tsx/compiled processes + port-based fallback ✅
+- [x] Slack @mention task creation (2026-03-21) — `@nanoprym` in any channel starts threaded task flow (repo selection → task creation → lifecycle updates → approve/reject in thread), threadMap refactored for per-task channel routing, manifest updated with `app_mention`/`message` events ✅
 
 ---
 

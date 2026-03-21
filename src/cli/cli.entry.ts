@@ -9,7 +9,7 @@ import { EventLedger } from '../core/event-ledger.js';
 import { loadConfig } from '../config/config.loader.js';
 // createChildLogger available from _shared/logger if needed
 import { NANOPRYM_VERSION, LEDGER_DIR, DASHBOARD_DIST_DIR } from '../_shared/constants.js';
-import type { TaskComplexity, TaskType, Message } from '../_shared/types.js';
+import type { TaskComplexity, TaskType, MessageTopic, Message } from '../_shared/types.js';
 import path from 'node:path';
 import fs from 'node:fs';
 
@@ -677,6 +677,156 @@ repoCmd
       console.error(C.red(`Failed: ${String(error)}`));
       process.exit(1);
     }
+  });
+
+// ── nanoprym scan ──────────────────────────────────────────
+program
+  .command('scan')
+  .description('Run a single scan cycle on registered repos (or start continuous scanning)')
+  .option('--once', 'Run a single scan cycle and exit')
+  .option('--interval <minutes>', 'Scan interval in minutes (default: 60)', '60')
+  .option('--repos <names>', 'Comma-separated repo names (default: all)')
+  .option('--scanners <names>', 'Comma-separated scanner names (default: all available)')
+  .option('--max-tasks <n>', 'Max tasks to create per cycle', '3')
+  .action(async (options) => {
+    const { ScanScheduler } = await import('../core/scan-scheduler.js');
+
+    const config = loadConfig();
+    const dashboardDir = path.resolve(process.cwd(), DASHBOARD_DIST_DIR);
+    const orchestrator = new Orchestrator({
+      repoRoot: process.cwd(),
+      dashboardDir: fs.existsSync(dashboardDir) ? dashboardDir : undefined,
+      notifications: config.notifications,
+    });
+
+    const scheduler = new ScanScheduler({
+      intervalMs: parseInt(options.interval, 10) * 60 * 1000,
+      repos: options.repos ? options.repos.split(',') : [],
+      scanners: options.scanners ? options.scanners.split(',') : [],
+      maxTasksPerScan: parseInt(options.maxTasks, 10),
+      onFinding: async (finding) => {
+        const taskId = await orchestrator.startTask({
+          title: finding.summary,
+          description: finding.details,
+          complexity: finding.complexity,
+          taskType: finding.taskType,
+          source: `scanner:${finding.scanner}`,
+          repoName: finding.repoName,
+        });
+        console.log(`  ${C.green('Task created')}: ${C.cyan(taskId)} — ${finding.summary}`);
+        return taskId;
+      },
+    });
+
+    if (options.once) {
+      console.log(`\n${C.bold('Running single scan cycle...')}\n`);
+      const findings = await scheduler.runScanCycle();
+      console.log(`\n${C.bold('Scan complete')}: ${findings.length} finding(s)\n`);
+      orchestrator.shutdown();
+    } else {
+      console.log(`\n${C.bold('Autonomous Scan Scheduler')}\n`);
+      console.log(`  ${C.dim('Interval')}: ${options.interval} minutes`);
+      console.log(`  ${C.dim('Max tasks/cycle')}: ${options.maxTasks}`);
+      console.log(`  ${C.dim('Press Ctrl+C to stop')}\n`);
+
+      scheduler.start();
+
+      process.on('SIGINT', () => {
+        console.log(`\n${C.yellow('Stopping scanner...')}`);
+        scheduler.stop();
+        orchestrator.shutdown();
+        process.exit(0);
+      });
+    }
+  });
+
+// ── nanoprym evolve ─────────────────────────────────────────
+program
+  .command('evolve')
+  .description('Trigger evolution check — extract rules from learned patterns and create PR')
+  .option('--dry-run', 'Show what would be evolved without creating PR')
+  .action(async (options) => {
+    const { LearningEngine } = await import('../evolution/learning.engine.js');
+    const { EvolutionPRWorkflow } = await import('../evolution/evolution-pr.js');
+    const { EventBus } = await import('../core/event-bus.js');
+    const { EventLedger } = await import('../core/event-ledger.js');
+
+    console.log(`\n${C.bold('Evolution Check')}\n`);
+
+    // Collect patterns from all recent task ledgers
+    const ledgerDir = path.resolve(process.env.HOME ?? '~', LEDGER_DIR);
+    if (!fs.existsSync(ledgerDir)) {
+      console.log(C.dim('No task history found.'));
+      return;
+    }
+
+    const ledgerFiles = fs.readdirSync(ledgerDir).filter(f => f.endsWith('.db'));
+    if (ledgerFiles.length === 0) {
+      console.log(C.dim('No tasks to learn from.'));
+      return;
+    }
+
+    // Replay all CLUSTER_COMPLETE events through a LearningEngine
+    const tmpLedger = await EventLedger.create(':memory:');
+    const tmpBus = new EventBus(tmpLedger);
+    const engine = new LearningEngine(tmpBus);
+
+    for (const file of ledgerFiles) {
+      try {
+        const ledger = await EventLedger.create(path.join(ledgerDir, file));
+        const completions = ledger.query({ topic: 'CLUSTER_COMPLETE' as MessageTopic });
+        for (const msg of completions) {
+          tmpBus.publish({
+            taskId: msg.taskId,
+            topic: 'CLUSTER_COMPLETE',
+            sender: 'replay',
+            content: msg.content,
+          });
+        }
+        ledger.close();
+      } catch { /* skip corrupt ledgers */ }
+    }
+
+    const patterns = engine.getPatterns();
+    const stats = engine.getStats();
+
+    console.log(`  ${C.dim('Tasks replayed')}: ${stats.totalTasks}`);
+    console.log(`  ${C.dim('Success rate')}:   ${(stats.successRate * 100).toFixed(1)}%`);
+    console.log(`  ${C.dim('Patterns')}:       ${patterns.length}`);
+
+    if (patterns.length === 0) {
+      console.log(`\n  ${C.dim('No patterns detected yet. Need 5+ similar signals.')}\n`);
+      tmpLedger.close();
+      return;
+    }
+
+    console.log(`\n  ${C.bold('Detected Patterns')}:\n`);
+    for (const p of patterns) {
+      console.log(`    ${C.cyan(p.id)} — ${p.signalCount} signals, ${(p.confidence * 100).toFixed(0)}% confidence`);
+    }
+
+    if (options.dryRun) {
+      console.log(`\n  ${C.yellow('Dry run — no PR created.')}\n`);
+      tmpLedger.close();
+      return;
+    }
+
+    // Create evolution PR
+    const workflow = new EvolutionPRWorkflow({ repoRoot: process.cwd() });
+    const result = await workflow.processPatterns(patterns);
+
+    if (result) {
+      console.log(`\n  ${C.green('Evolution created')}:`);
+      console.log(`    ${C.dim('Version')}: v${result.version}`);
+      console.log(`    ${C.dim('Branch')}:  ${result.branch}`);
+      console.log(`    ${C.dim('Rules')}:   ${result.rules.length}`);
+      if (result.prUrl) console.log(`    ${C.dim('PR')}:      ${C.cyan(result.prUrl)}`);
+    } else {
+      console.log(`\n  ${C.dim('No actionable patterns found.')}`);
+    }
+
+    tmpLedger.close();
+    console.log('');
   });
 
 // ── nanoprym config ─────────────────────────────────────────

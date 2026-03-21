@@ -21,6 +21,7 @@ vi.mock('@slack/bolt', () => {
     App: vi.fn().mockImplementation(() => ({
       client: { chat: { postMessage: mockPostMessage } },
       action: mockAction,
+      event: vi.fn(),
       start: mockStart,
       stop: mockStop,
     })),

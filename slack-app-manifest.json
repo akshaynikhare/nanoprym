@@ -15,11 +15,21 @@
       "bot": [
         "chat:write",
         "channels:read",
-        "groups:read"
+        "channels:history",
+        "groups:read",
+        "groups:history",
+        "app_mentions:read"
       ]
     }
   },
   "settings": {
+    "event_subscriptions": {
+      "bot_events": [
+        "app_mention",
+        "message.channels",
+        "message.groups"
+      ]
+    },
     "interactivity": {
       "is_enabled": true
     },
