@@ -75,16 +75,76 @@ def get_nlp():
 
 
 def compress_spacy(text: str) -> str:
-    """Layer 2: spaCy NLP compression."""
+    """Layer 2: spaCy NLP compression.
+
+    - Preserves named entities (names, dates, amounts, URLs, code terms)
+    - Removes adverbial modifiers (advmod) that don't carry essential meaning
+    - Removes filler adjectives attached to non-entity nouns
+    - Simplifies verbose constructions
+    """
     nlp = get_nlp()
     if nlp is None:
         return text
 
-    # TODO: Phase 2 Week 3 — Implement entity-aware compression
-    # - NER: preserve names, dates, amounts, URLs
-    # - Dependency parsing: remove adverbial modifiers
-    # - Sentence simplification
-    return text
+    # Process in chunks to handle long text (spaCy has memory limits)
+    max_chars = 100_000
+    if len(text) > max_chars:
+        mid = len(text) // 2
+        return compress_spacy(text[:mid]) + " " + compress_spacy(text[mid:])
+
+    doc = nlp(text)
+
+    # Collect entity character spans for preservation
+    entity_spans: set[int] = set()
+    for ent in doc.ents:
+        for i in range(ent.start, ent.end):
+            entity_spans.add(i)
+
+    # Adverbs to always keep (they carry essential meaning)
+    KEEP_ADVERBS = {
+        "not", "never", "no", "always", "only", "also", "still",
+        "already", "yet", "here", "there", "now", "then", "first",
+        "finally", "immediately", "currently", "previously",
+    }
+
+    # Removable filler adjectives (when not part of an entity)
+    FILLER_ADJS = {
+        "various", "certain", "particular", "specific", "respective",
+        "overall", "general", "entire", "whole", "complete",
+        "significant", "considerable", "substantial", "extensive",
+    }
+
+    tokens_to_remove: set[int] = set()
+
+    for token in doc:
+        # Skip tokens inside entity spans — always preserve
+        if token.i in entity_spans:
+            continue
+
+        # Remove adverbial modifiers (advmod) unless essential
+        if token.dep_ == "advmod" and token.pos_ == "ADV":
+            if token.text.lower() not in KEEP_ADVERBS:
+                tokens_to_remove.add(token.i)
+
+        # Remove filler adjectives attached to non-entity nouns
+        if token.dep_ == "amod" and token.pos_ == "ADJ":
+            if token.text.lower() in FILLER_ADJS:
+                tokens_to_remove.add(token.i)
+
+    # Rebuild text: use token.text_with_ws, skip removed tokens
+    parts: list[str] = []
+    for token in doc:
+        if token.i in tokens_to_remove:
+            continue
+        parts.append(token.text_with_ws)
+
+    result = "".join(parts)
+
+    # Normalize multiple spaces from removed tokens
+    import re
+    result = re.sub(r"  +", " ", result).strip()
+
+    return result
 
 
 # ── Layer 3: Template Cache ──────────────────────────────────

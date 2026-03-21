@@ -16,13 +16,7 @@ RESET := \033[0m
 # ── Setup ───────────────────────────────────────────────────
 .PHONY: setup
 setup: ## First-time setup: install deps, start services, configure
-	@echo "$(CYAN)Setting up Nanoprym...$(RESET)"
-	npm install
-	@echo "$(GREEN)Setting up TOM sidecar...$(RESET)"
-	cd src/tom && pip3 install -r requirements.txt --break-system-packages 2>/dev/null || pip3 install -r requirements.txt
-	@echo "$(GREEN)Starting infrastructure...$(RESET)"
-	$(MAKE) infra-up
-	@echo "$(GREEN)Setup complete!$(RESET)"
+	@bash scripts/setup.sh
 
 # ── Development ─────────────────────────────────────────────
 .PHONY: build dev clean
@@ -51,18 +45,28 @@ infra-status: ## Show infrastructure status
 	docker compose ps
 
 # ── Nanoprym Daemon ─────────────────────────────────────────
-.PHONY: start stop status
-start: ## Start Nanoprym orchestrator
-	@echo "$(CYAN)Starting Nanoprym...$(RESET)"
-	node dist/core/orchestrator.js
+.PHONY: up down start stop status
+up: infra-up tom-start start ## Start infra + TOM + nanoprym (no dashboard dev server)
 
-stop: ## Stop Nanoprym orchestrator
+down: stop dashboard-stop tom-stop infra-down ## Stop everything
+
+serve: infra-up tom-start build ## Start everything: infra + TOM + nanoprym + dashboard dev server
+	@echo "$(CYAN)Starting dashboard dev server...$(RESET)"
+	@cd dashboard && npm run dev &
+	@sleep 2
+	@echo "$(CYAN)Starting Nanoprym daemon...$(RESET)"
+	@node dist/cli/cli.entry.js serve
+
+start: build ## Start Nanoprym daemon only (API + health)
+	@echo "$(CYAN)Starting Nanoprym daemon...$(RESET)"
+	node dist/cli/cli.entry.js serve
+
+stop: ## Stop Nanoprym daemon + dashboard
 	@echo "$(YELLOW)Stopping Nanoprym...$(RESET)"
-	@pkill -f "node dist/core/orchestrator" 2>/dev/null || echo "Not running"
+	@pkill -f "cli.entry.js serve" 2>/dev/null || echo "Not running"
 
-status: ## Show current agent status
-	@echo "$(CYAN)Nanoprym Status$(RESET)"
-	@echo "TODO: Implement status command"
+status: ## Show orchestrator health
+	node dist/cli/cli.entry.js health
 
 # ── Task Management ─────────────────────────────────────────
 .PHONY: task-run task-list task-status task-resume
@@ -147,12 +151,16 @@ typecheck: ## TypeScript type check (no emit)
 	npx tsc --noEmit
 
 # ── Dashboard ───────────────────────────────────────────────
-.PHONY: dashboard dashboard-stop
-dashboard: ## Start dashboard on localhost:3000
-	@echo "TODO: Implement dashboard (Phase 2)"
+.PHONY: dashboard dashboard-build dashboard-stop
+dashboard: ## Start dashboard dev server (hot-reload, port 3000)
+	cd dashboard && npm run dev
 
-dashboard-stop: ## Stop dashboard
-	@echo "TODO: Implement dashboard stop"
+dashboard-build: ## Build dashboard for production
+	cd dashboard && npm run build
+	@echo "$(GREEN)Dashboard built → dashboard/dist/$(RESET)"
+
+dashboard-stop: ## Stop dashboard dev server
+	@pkill -f "vite" 2>/dev/null || echo "Dashboard not running"
 
 # ── Docker ──────────────────────────────────────────────────
 .PHONY: docker-build docker-push

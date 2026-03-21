@@ -99,9 +99,14 @@ export class PromptVersioner {
 
       const files = fs.readdirSync(roleDir).filter(f => f.endsWith('.system.md')).sort();
       const scoresPath = path.join(roleDir, 'scores.json');
-      const savedScores: Record<string, Partial<PromptVersion>> = fs.existsSync(scoresPath)
-        ? JSON.parse(fs.readFileSync(scoresPath, 'utf-8'))
-        : {};
+      let savedScores: Record<string, Partial<PromptVersion>> = {};
+      if (fs.existsSync(scoresPath)) {
+        try {
+          savedScores = JSON.parse(fs.readFileSync(scoresPath, 'utf-8'));
+        } catch (error) {
+          log.warn('Corrupt scores.json, resetting', { role, path: scoresPath, error: String(error) });
+        }
+      }
 
       const versions: PromptVersion[] = files.map((file, index) => {
         const version = file.replace('.system.md', '');

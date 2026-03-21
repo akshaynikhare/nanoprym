@@ -45,9 +45,10 @@ describe('HealthServer', () => {
     expect(typeof body.uptime).toBe('number');
     expect(body.timestamp).toBeDefined();
     expect(body.activeTask).toBe(false);
+    expect(body.activeTaskCount).toBe(0);
   });
 
-  it('should report activeTask from the check function', async () => {
+  it('should report activeTask and activeTaskCount from the check function', async () => {
     server = new HealthServer({ port: 0, activeTaskCheck: () => true });
     const address = server.getServer().address();
     const port = typeof address === 'object' && address ? address.port : 0;
@@ -59,6 +60,7 @@ describe('HealthServer', () => {
 
     const { body } = await fetchJson(port, '/health');
     expect(body.activeTask).toBe(true);
+    expect(body.activeTaskCount).toBe(1);
   });
 
   it('should return 404 for unknown paths', async () => {
@@ -99,5 +101,6 @@ describe('HealthServer', () => {
     expect(health.version).toBeDefined();
     expect(health.uptime).toBeGreaterThanOrEqual(0);
     expect(health.activeTask).toBe(false);
+    expect(health.activeTaskCount).toBe(0);
   });
 });

@@ -5,6 +5,7 @@
  */
 import { BaseAgent, type AgentResult } from '../_shared/agent.base.js';
 import { ClaudeProvider, type ClaudeExecutionResult } from '../../providers/claude.provider.js';
+import type { GitManager } from '../../git/git.manager.js';
 import type { BuiltContext } from '../_shared/context.builder.js';
 import type { Message, AgentConfig } from '../_shared/agent.types.js';
 import { EventBus } from '../../core/event-bus.js';
@@ -15,10 +16,19 @@ const log = createChildLogger('builder-agent');
 
 export class BuilderAgent extends BaseAgent {
   private claude: ClaudeProvider;
+  private gitManager: GitManager | null;
+  private worktreePath: string | null = null;
 
-  constructor(config: AgentConfig, bus: EventBus, claude?: ClaudeProvider) {
+  constructor(config: AgentConfig, bus: EventBus, claude?: ClaudeProvider, gitManager?: GitManager) {
     super(config, bus);
     this.claude = claude ?? new ClaudeProvider();
+    this.gitManager = gitManager ?? null;
+  }
+
+  /** Set the worktree path for isolated execution */
+  setWorktreePath(path: string): void {
+    this.worktreePath = path;
+    log.info('Worktree path set', { path });
   }
 
   static createConfig(overrides?: Partial<AgentConfig>): AgentConfig {
@@ -99,7 +109,25 @@ export class BuilderAgent extends BaseAgent {
       maxTurns: 20,
       outputFormat: 'json',
       timeoutMs: this.config.timeout,
+      workingDirectory: this.worktreePath ?? undefined,
     });
+
+    // Auto-commit changes in worktree
+    if (this.gitManager && this.worktreePath) {
+      try {
+        const files = await this.gitManager.getUncommittedFiles(this.worktreePath);
+        if (files.length > 0) {
+          const commitHash = await this.gitManager.commit(
+            this.worktreePath,
+            files,
+            `feat(nanoprym): ${triggeringMessage.taskId.slice(0, 8)} implementation`,
+          );
+          log.info('Auto-committed changes', { files: files.length, hash: commitHash });
+        }
+      } catch (error) {
+        log.warn('Auto-commit failed', { error: String(error) });
+      }
+    }
 
     return this.parseResult(result);
   }

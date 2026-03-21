@@ -45,15 +45,18 @@ export class TomClient {
       });
 
       let data = '';
-      client.on('data', (chunk) => { data += chunk.toString(); });
-      client.on('end', () => {
-        try {
-          const lines = data.trim().split('\n');
-          resolve(JSON.parse(lines[lines.length - 1]));
-        } catch (err) {
-          reject(new Error(`TOM parse error: ${err}`));
+      client.on('data', (chunk) => {
+        data += chunk.toString();
+        // Server sends newline-delimited JSON — resolve on first complete line
+        const newlineIdx = data.indexOf('\n');
+        if (newlineIdx !== -1) {
+          try {
+            resolve(JSON.parse(data.slice(0, newlineIdx)));
+          } catch (err) {
+            reject(new Error(`TOM parse error: ${err}`));
+          }
+          client.destroy();
         }
-        client.destroy();
       });
       client.on('error', (err) => {
         log.warn('TOM sidecar unavailable', { error: err.message });

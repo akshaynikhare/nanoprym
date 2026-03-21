@@ -15,7 +15,9 @@ import { createChildLogger } from '../_shared/logger.js';
 
 const log = createChildLogger('project-config');
 
-const PROJECTS_DIR = path.resolve(process.env.HOME ?? '~', '.nanoprym', 'projects');
+function defaultProjectsDir(): string {
+  return path.resolve(process.env.HOME ?? '~', '.nanoprym', 'projects');
+}
 
 export interface ProjectConfig {
   name: string;
@@ -29,14 +31,16 @@ export interface ProjectConfig {
 
 export class ProjectManager {
   private projects: Map<string, ProjectConfig> = new Map();
+  private projectsDir: string;
 
-  constructor() {
+  constructor(baseDir?: string) {
+    this.projectsDir = baseDir ?? defaultProjectsDir();
     this.loadProjects();
   }
 
   /** Register a new project */
   register(name: string, repoPath: string, repoUrl?: string): ProjectConfig {
-    const projectDir = path.join(PROJECTS_DIR, name);
+    const projectDir = path.join(this.projectsDir, name);
     const brainPath = path.join(projectDir, 'project.brain.md');
     const kbPath = path.join(projectDir, 'kb');
     const ledgerPath = path.join(projectDir, 'ledgers');
@@ -96,13 +100,13 @@ export class ProjectManager {
 
   /** Load all projects from disk */
   private loadProjects(): void {
-    if (!fs.existsSync(PROJECTS_DIR)) return;
+    if (!fs.existsSync(this.projectsDir)) return;
 
-    const dirs = fs.readdirSync(PROJECTS_DIR, { withFileTypes: true })
+    const dirs = fs.readdirSync(this.projectsDir, { withFileTypes: true })
       .filter(d => d.isDirectory());
 
     for (const dir of dirs) {
-      const configPath = path.join(PROJECTS_DIR, dir.name, 'project.json');
+      const configPath = path.join(this.projectsDir, dir.name, 'project.json');
       if (fs.existsSync(configPath)) {
         try {
           const config = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as ProjectConfig;

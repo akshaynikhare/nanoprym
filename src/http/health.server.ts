@@ -5,6 +5,7 @@
 import http from 'node:http';
 import { NANOPRYM_VERSION, HEALTH_CHECK_PORT } from '../_shared/constants.js';
 import { createChildLogger } from '../_shared/logger.js';
+import type { HealthMonitor } from '../monitoring/health.monitor.js';
 
 const log = createChildLogger('health');
 
@@ -14,6 +15,7 @@ export interface HealthStatus {
   uptime: number;
   timestamp: string;
   activeTask: boolean;
+  activeTaskCount: number;
 }
 
 export type ActiveTaskCheck = () => boolean;
@@ -22,6 +24,7 @@ export class HealthServer {
   private server: http.Server;
   private startedAt: number;
   private activeTaskCheck: ActiveTaskCheck;
+  private healthMonitor: HealthMonitor | null = null;
 
   constructor(options?: { port?: number; activeTaskCheck?: ActiveTaskCheck }) {
     const port = options?.port ?? HEALTH_CHECK_PORT;
@@ -45,14 +48,25 @@ export class HealthServer {
     });
   }
 
+  /** Attach a health monitor for dependency-aware status */
+  attachMonitor(monitor: HealthMonitor): void {
+    this.healthMonitor = monitor;
+  }
+
   /** Build current health status */
   getHealthStatus(): HealthStatus {
+    const overallStatus = this.healthMonitor
+      ? this.healthMonitor.getDetailedStatus().status
+      : 'ok';
+
+    const hasActiveTask = this.activeTaskCheck();
     return {
-      status: 'ok',
+      status: overallStatus === 'down' ? 'degraded' : overallStatus,
       version: NANOPRYM_VERSION,
       uptime: Math.floor((Date.now() - this.startedAt) / 1000),
       timestamp: new Date().toISOString(),
-      activeTask: this.activeTaskCheck(),
+      activeTask: hasActiveTask,
+      activeTaskCount: hasActiveTask ? 1 : 0,
     };
   }
 

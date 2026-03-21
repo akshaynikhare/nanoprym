@@ -100,9 +100,21 @@ export class DatabaseClient {
         created_at TEXT NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS health_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        status TEXT NOT NULL,
+        memory_used_mb INTEGER NOT NULL,
+        memory_total_mb INTEGER NOT NULL,
+        memory_percent INTEGER NOT NULL,
+        dependencies TEXT NOT NULL,
+        active_task INTEGER NOT NULL DEFAULT 0,
+        recorded_at TEXT NOT NULL
+      );
+
       CREATE INDEX IF NOT EXISTS idx_metrics_task ON metrics(task_id);
       CREATE INDEX IF NOT EXISTS idx_cost_task ON cost_tracking(task_id);
       CREATE INDEX IF NOT EXISTS idx_cost_provider ON cost_tracking(provider, recorded_at);
+      CREATE INDEX IF NOT EXISTS idx_health_recorded ON health_snapshots(recorded_at);
     `);
   }
 

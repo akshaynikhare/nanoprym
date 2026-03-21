@@ -99,6 +99,9 @@ testing:
 notifications:
   slack:
     enabled: false  # Enable after Slack app setup
+    socketMode: true  # Socket Mode — no public URL needed
+    # Tokens: set SLACK_BOT_TOKEN, SLACK_APP_TOKEN, SLACK_SIGNING_SECRET env vars
+    # Legacy fallback: set SLACK_WEBHOOK_URL for one-way notifications only
     channels:
       auto: "#nanoprym-auto"
       decisions: "#nanoprym-decisions"
@@ -113,7 +116,7 @@ scanners:
 
 # Evolution
 evolution:
-  enabled: false  # Enable in Phase 3
+  enabled: true
   frequency: weekly
   min_signals: 5
   auto_revert_after_tasks: 25
@@ -122,4 +125,4 @@ evolution:
 # Dashboard
 dashboard:
   port: 3000
-  enabled: false  # Enable in Phase 2
+  enabled: true

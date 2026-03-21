@@ -149,7 +149,7 @@ export class ClaudeProvider {
       // spawn() passes args as array — no shell interpretation, safe for any prompt content
       const child = spawn(this.cliBinary, args, {
         cwd: options.workingDirectory ?? process.cwd(),
-        env: { ...process.env },
+        env: { ...process.env, CLAUDECODE: undefined },
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 

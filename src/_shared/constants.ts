@@ -11,6 +11,8 @@ export const CONFIG_DIR = '.nanoprym';
 export const LEDGER_DIR = `${CONFIG_DIR}/ledgers`;
 export const KB_DIR = `${CONFIG_DIR}/kb`;
 export const RESEARCH_DIR = `${CONFIG_DIR}/research`;
+export const REPOS_DIR = `${CONFIG_DIR}/repos`;
+export const PROJECTS_DIR = `${CONFIG_DIR}/projects`;
 
 // ── Limits ───────────────────────────────────────────────────
 export const MAX_RETRY_ATTEMPTS = 3;
@@ -43,6 +45,12 @@ export const TOM_CLOUD_BUDGET_USD = 5.00;
 
 // ── HTTP ─────────────────────────────────────────────────────
 export const HEALTH_CHECK_PORT = 9090;
+export const API_SERVER_PORT = 9091;
+export const DASHBOARD_DIST_DIR = 'dashboard/dist';
+
+// ── Health Monitoring ────────────────────────────────────
+export const HEALTH_CHECK_INTERVAL_MS = 30_000; // 30s between checks
+export const DEPENDENCY_TIMEOUT_MS = 3_000;     // per-dependency check timeout
 
 // ── Git ──────────────────────────────────────────────────────
 export const GIT_BRANCH_PREFIX = 'nanoprym/';

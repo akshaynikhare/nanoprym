@@ -167,6 +167,25 @@ export interface NanoprymConfig {
   git: { worktree_isolation: boolean; conventional_commits: boolean; auto_pr: boolean; branch_prefix: string };
   context: Record<AgentRole, number>;
   testing: { coverage_overall: number; coverage_branch: number; runner: string };
+  notifications?: NotificationsConfig;
+  evolution?: EvolutionConfig;
+}
+
+export interface NotificationsConfig {
+  slack: {
+    enabled: boolean;
+    webhookUrl?: string;
+    socketMode?: boolean;
+    channels: { auto: string; decisions: string; failures: string; daily: string };
+  };
+}
+
+export interface EvolutionConfig {
+  enabled: boolean;
+  frequency: string;
+  min_signals: number;
+  auto_revert_after_tasks: number;
+  sandbox: string;
 }
 
 export interface TomConfig {
@@ -175,4 +194,30 @@ export interface TomConfig {
   compression: { layer1_rules: boolean; layer2_spacy: boolean; layer3_cache: boolean };
   routing: { bypass_first_gen: boolean; bypass_complex: boolean; compress_iterations: boolean; route_auxiliary: boolean };
   cloud_budget_monthly_usd: number;
+}
+
+// ── Health Monitoring Types ────────────────────────────────
+export type DependencyName = 'qdrant' | 'redis' | 'ollama' | 'tom';
+export type DependencyState = 'up' | 'down' | 'unknown';
+
+export interface DependencyStatus {
+  name: DependencyName;
+  state: DependencyState;
+  latencyMs?: number;
+  lastChecked: string;
+  error?: string;
+}
+
+export interface DetailedHealthStatus {
+  status: 'ok' | 'degraded' | 'down';
+  version: string;
+  uptime: number;
+  timestamp: string;
+  activeTask: boolean;
+  system: {
+    memoryUsedMb: number;
+    memoryTotalMb: number;
+    memoryPercent: number;
+  };
+  dependencies: DependencyStatus[];
 }

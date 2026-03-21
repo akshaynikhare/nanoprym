@@ -164,10 +164,44 @@ export class GitManager {
     return stdout.trim();
   }
 
-  /** Get list of changed files */
+  /** Get list of changed files (committed, compared to base branch) */
   async getChangedFiles(worktreePath: string, baseBranch: string = 'main'): Promise<string[]> {
     const { stdout } = await this.gitIn(worktreePath, `diff --name-only ${baseBranch}...HEAD`);
     return stdout.trim().split('\n').filter(Boolean);
+  }
+
+  /** Get uncommitted files (staged + unstaged + untracked) */
+  async getUncommittedFiles(worktreePath: string): Promise<string[]> {
+    const { stdout } = await this.gitIn(worktreePath, `status --porcelain`);
+    return stdout.trim().split('\n').filter(Boolean).map(line => line.slice(3));
+  }
+
+  /** Get full diff text against base branch */
+  async getDiff(worktreePath: string, baseBranch: string = 'main'): Promise<string> {
+    const { stdout } = await this.gitIn(worktreePath, `diff ${baseBranch}...HEAD`);
+    return stdout;
+  }
+
+  /** Merge a branch into main (from main repo root) */
+  async mergeBranch(branchName: string): Promise<void> {
+    await this.git(`checkout main`);
+    await this.git(`merge ${branchName} --no-ff -m "feat: merge ${branchName}"`);
+    log.info('Branch merged', { branch: branchName });
+  }
+
+  /** Force-delete a branch */
+  async deleteBranch(branchName: string): Promise<void> {
+    try {
+      await this.git(`branch -D ${branchName}`);
+      log.info('Branch deleted', { branch: branchName });
+    } catch (error) {
+      log.warn('Failed to delete branch', { branch: branchName, error: String(error) });
+    }
+  }
+
+  /** Get the repo root path */
+  getRepoRoot(): string {
+    return this.repoRoot;
   }
 
   // ── Internal helpers ─────────────────────────────────────

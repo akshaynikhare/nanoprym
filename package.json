@@ -19,6 +19,9 @@
     "typecheck": "tsc --noEmit",
     "tom:start": "python3 src/tom/tom.sidecar.py",
     "tom:test": "python3 -m pytest src/tom/tests/",
+    "dashboard": "cd dashboard && npm run dev",
+    "dashboard:build": "cd dashboard && npm run build",
+    "dashboard:install": "cd dashboard && npm install",
     "clean": "rm -rf dist",
     "prepare": "husky"
   },
@@ -35,6 +38,7 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
+    "@slack/bolt": "^4.6.0",
     "bullmq": "^5.0.0",
     "commander": "^12.0.0",
     "eventemitter3": "^5.0.1",

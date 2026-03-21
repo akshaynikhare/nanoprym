@@ -1,0 +1,29 @@
+{
+  "display_information": {
+    "name": "Nanoprym",
+    "description": "AI agent orchestration — task notifications and approval workflows",
+    "background_color": "#1a1a2e"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Nanoprym",
+      "always_online": true
+    }
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "chat:write",
+        "channels:read",
+        "groups:read"
+      ]
+    }
+  },
+  "settings": {
+    "interactivity": {
+      "is_enabled": true
+    },
+    "socket_mode_enabled": true,
+    "token_rotation_enabled": false
+  }
+}

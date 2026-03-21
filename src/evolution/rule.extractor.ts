@@ -50,9 +50,14 @@ export class RuleExtractor {
     const dir = path.dirname(outputPath);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 
-    const existing: ExtractedRule[] = fs.existsSync(outputPath)
-      ? JSON.parse(fs.readFileSync(outputPath, 'utf-8'))
-      : [];
+    let existing: ExtractedRule[] = [];
+    if (fs.existsSync(outputPath)) {
+      try {
+        existing = JSON.parse(fs.readFileSync(outputPath, 'utf-8'));
+      } catch (error) {
+        log.warn('Corrupt rules file, resetting', { path: outputPath, error: String(error) });
+      }
+    }
 
     // Merge: update existing, add new
     for (const rule of rules) {

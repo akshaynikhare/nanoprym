@@ -31,6 +31,23 @@ services:
           memory: 128M
     restart: unless-stopped
 
+  # Evolution sandbox — only started on-demand via sandbox.manager.ts
+  # Do NOT start with `docker compose up` — managed programmatically
+  sandbox:
+    build:
+      context: .
+      target: sandbox
+    container_name: nanoprym-sandbox
+    profiles: ["evolution"]  # Only starts with --profile evolution
+    network_mode: "none"     # No network access
+    mem_limit: 2g
+    cpus: 2
+    read_only: true
+    tmpfs:
+      - /tmp:rw,size=512m
+    environment:
+      - NANOPRYM_SANDBOX=true
+
 volumes:
   qdrant_data:
   redis_data:
